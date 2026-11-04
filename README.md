@@ -7,6 +7,8 @@ Pathways: **Geospatial / Immersive Web** (primary) and **Archival NLP / OCR** (s
 
 > **Demo data notice.** The 24 sites and 12 field entries that ship with the seed script are **sample content for demonstration**. Coordinates were cross-checked against public references, but descriptions are short summaries, not scholarly records, and the field entries are invented notes by fictional "Demo Fellow" authors.
 
+**Live demo:** https://virasat-atlas.onrender.com (free hosting: the first request after idle can take up to a minute while it wakes; demo data resets on restart)
+
 ## The problem
 
 Field documentation of heritage (travel journals, photographs, scanned Hindi and Gujarati documents, folklore notes) piles up as unstructured files. Nobody can search it, nobody can see it on a map, and the Hindi and Gujarati material is invisible to English keyword search. Knowledge gathered on one fellowship trip is effectively lost to the next.
