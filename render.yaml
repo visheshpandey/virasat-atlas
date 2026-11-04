@@ -1,0 +1,27 @@
+# Render blueprint: one web service running the Docker image, with SQLite.
+# Free-tier notes: the disk is ephemeral, so the demo data is re-seeded on every start and
+# uploaded photos are lost on restart; the service sleeps after ~15 minutes idle.
+services:
+  - type: web
+    name: virasat-atlas
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    # Render supplies $PORT. Seed only when the database is empty, then start the server.
+    dockerCommand: sh -c "python scripts/seed.py --if-empty && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: SECRET_KEY
+        generateValue: true
+      - key: SEED_PASSWORD
+        generateValue: true
+      - key: DATABASE_URL
+        value: sqlite+aiosqlite:///./virasat.db
+      - key: ALLOWED_ORIGINS
+        value: "*"
+      - key: GEMINI_MODEL
+        value: gemini-3.1-flash-lite
+      # Optional: paste your key in the Render dashboard to enable the Gemini tagging layer.
+      - key: GEMINI_API_KEY
+        sync: false
