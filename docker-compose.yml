@@ -1,0 +1,39 @@
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_USER: virasat
+      POSTGRES_PASSWORD: virasat
+      POSTGRES_DB: virasat
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U virasat -d virasat"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://virasat:virasat@db:5432/virasat
+      SECRET_KEY: ${SECRET_KEY:-dev-only-insecure-secret-change-me}
+      APP_ENV: ${APP_ENV:-development}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      SEMANTIC_MODEL: ${SEMANTIC_MODEL:-}
+      MEDIA_DIR: /srv/media
+    ports:
+      - "8000:8000"
+    volumes:
+      - media:/srv/media
+    # Seed only when the database is empty, then start the server.
+    command: >
+      sh -c "python scripts/seed.py --if-empty &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000"
+
+volumes:
+  pgdata:
+  media:
