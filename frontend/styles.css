@@ -372,3 +372,8 @@ body.picking .leaflet-container { cursor: crosshair; }
     @keyframes drawer-in { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: none; } }
   }
 }
+
+.dr-hero { margin: 0 0 14px; border-radius: 10px; overflow: hidden; background: var(--line); }
+.dr-hero img { display: block; width: 100%; max-height: 240px; object-fit: cover; }
+.dr-hero figcaption { font-size: 11.5px; padding: 6px 10px; color: var(--muted, #6b5d4d); background: var(--parchment); }
+.dr-hero figcaption a { color: var(--indigo); }

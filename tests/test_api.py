@@ -388,3 +388,28 @@ def test_ocr_lang_pattern():
     assert ocr_service.valid_lang("guj")
     assert not ocr_service.valid_lang("hin; rm")
     assert not ocr_service.valid_lang("")
+
+
+def test_site_image_lookup_uses_backend_and_degrades(client, monkeypatch):
+    """GET /sites/{id}/image returns the looked-up photo, or empty fields when none is found."""
+    from app.services import site_images
+
+    site_id = client.get("/api/v1/sites").json()["items"][0]["id"]
+    found = {"image_url": "https://upload.wikimedia.org/x.jpg", "page_url": "https://en.wikipedia.org/wiki/X",
+             "title": "X", "source": "Wikipedia"}
+
+    async def fake_found(name):
+        return found
+
+    async def fake_none(name):
+        return None
+
+    monkeypatch.setattr(site_images, "get_site_image", fake_found)
+    assert client.get(f"/api/v1/sites/{site_id}/image").json()["image_url"] == found["image_url"]
+
+    monkeypatch.setattr(site_images, "get_site_image", fake_none)
+    assert client.get(f"/api/v1/sites/{site_id}/image").json() == {
+        "image_url": None, "page_url": None, "title": None, "source": None}
+
+    missing = "00000000-0000-0000-0000-000000000000"
+    assert client.get(f"/api/v1/sites/{missing}/image").status_code == 404

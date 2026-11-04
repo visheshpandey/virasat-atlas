@@ -12,11 +12,12 @@ from app.schemas.heritage import (
     NearbyList,
     SiteCreate,
     SiteDetail,
+    SiteImage,
     SiteList,
     SiteOut,
     SiteType,
 )
-from app.services import site_service
+from app.services import site_images, site_service
 
 router = APIRouter(prefix="/sites", tags=["sites"])
 
@@ -61,6 +62,13 @@ async def nearby_sites(
 async def get_site(site_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> SiteDetail:
     """One site with its field entries."""
     return await site_service.get_site_detail(db, site_id)
+
+
+@router.get("/{site_id}/image", response_model=SiteImage)
+async def get_site_image(site_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> SiteImage:
+    """A representative photo for the site, looked up server-side. Empty fields if none found."""
+    site = await site_service.get_site_detail(db, site_id)  # 404 if the site does not exist
+    return SiteImage(**(await site_images.get_site_image(site.name) or {}))
 
 
 @router.post("", response_model=SiteOut, status_code=201)

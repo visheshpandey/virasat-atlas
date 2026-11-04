@@ -102,6 +102,14 @@ class NearbySite(SiteOut):
     distance_km: float
 
 
+class SiteImage(BaseModel):
+    """A representative photo from Wikipedia or Wikimedia Commons; all null when none was found."""
+    image_url: str | None = None
+    page_url: str | None = None  # where the photo and its licence can be seen
+    title: str | None = None
+    source: str | None = None
+
+
 class SiteList(BaseModel):
     items: list[SiteOut]
     total: int

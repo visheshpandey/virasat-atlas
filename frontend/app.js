@@ -442,6 +442,26 @@
         h('button', { class: 'btn terracotta', type: 'button', onclick: () => openEntryDialog({ siteId: d.id }) }, 'Add a field entry here')));
   }
 
+  /* Photo of the site, looked up by the backend (Wikipedia / Wikimedia Commons). Optional. */
+  async function loadHero(id, name) {
+    try {
+      const im = await api(`/sites/${id}/image`);
+      if (state.selectedId !== id || !im.image_url) return;
+      const body = drawer.querySelector('.dr-body');
+      if (!body) return;
+      const fig = h('figure', { class: 'dr-hero' });
+      const img = h('img', { src: im.image_url, alt: `Photo of ${name}`, loading: 'lazy' });
+      img.addEventListener('error', () => fig.remove());
+      fig.append(img);
+      if (im.page_url && im.page_url.startsWith('https://')) {
+        fig.append(h('figcaption', {}, 'Photo: ',
+          h('a', { href: im.page_url, target: '_blank', rel: 'noopener noreferrer' }, im.source || 'Wikimedia'),
+          ' (licence on source page)'));
+      }
+      body.prepend(fig);
+    } catch (_) { /* no photo is fine */ }
+  }
+
   async function openSite(id, { fly = true } = {}) {
     const prev = state.selectedId;
     state.selectedId = id;
@@ -456,6 +476,7 @@
       const d = await api(`/sites/${id}`);
       if (state.selectedId !== id) return;
       renderDrawer(d);
+      loadHero(id, d.name);
       drawer.scrollTop = 0;
       drawer.focus({ preventScroll: true });
     } catch (e) {

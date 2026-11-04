@@ -18,6 +18,7 @@ Virasat Atlas ingests a note, a photo or a scanned page, **tags it automatically
 ## Features
 
 - Interactive Leaflet map of Gujarat, colour-coded by site type, UNESCO sites ringed in gold, detail drawer with folklore and field entries
+- Site photos: the backend looks up a representative photo for each site on Wikipedia / Wikimedia Commons (cached 10 minutes, credited in the drawer, silently skipped if unavailable)
 - Multilingual auto-tagger (English, Devanagari, Gujarati) with century and BCE extraction and script detection; optional LLM layer when an API key is set
 - Hybrid search: word TF-IDF (0.6) + character n-gram TF-IDF (0.4), so Hindi, Gujarati, transliteration and typos all work; optional dense layer via `SEMANTIC_MODEL`
 - Field entry ingest with photo upload (verified as a real image), auto-attach to the nearest site within 2 km, and a live tag preview in the UI
@@ -96,6 +97,7 @@ On PostgreSQL a generated `geog` geography column and a GIST index are added to 
 | GET | `/sites` | List; filters `type`, `era`, `theme`, `unesco` | no |
 | GET | `/sites/nearby` | `lat`, `lng`, `radius_km` | no |
 | GET | `/sites/{id}` | Site with its entries | no |
+| GET | `/sites/{id}/image` | Representative photo (Wikipedia / Commons), nulls if none | no |
 | POST | `/sites` | Create a site | JWT |
 | POST | `/entries` | Multipart: title, body, kind, author, optional site_id, lat/lng, image | no |
 | GET | `/entries/{id}` | One entry | no |
@@ -176,6 +178,7 @@ Tests use a temporary SQLite database and cover the tagger (stepwell, Hindi, cen
 - The LLM tagging layer is covered by mocked tests only; it has not been run against the live API.
 - OCR quality depends on the scan. Printed Hindi works far better than handwriting or old manuscripts.
 - The PostGIS nearby query and the Docker setup are untested locally.
+- Site photos come live from Wikipedia / Wikimedia Commons, so they need internet access and are matched by site name; licences are on each photo's source page. Always check a match before relying on it.
 - Seed content is demo data (see the notice at the top).
 
 ## Roadmap
