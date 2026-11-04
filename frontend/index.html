@@ -1,3 +1,219 @@
 <!doctype html>
-<title>Virasat Atlas</title>
-<p>Frontend placeholder.</p>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Virasat Atlas</title>
+  <meta name="description" content="Field notes, photographs and scanned documents from Gujarat's heritage sites, placed on a searchable map.">
+  <meta name="theme-color" content="#F2E8D2">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2328306B'/%3E%3Ccircle cx='16' cy='16' r='7' fill='%23A9482A' stroke='%23F2E8D2' stroke-width='3'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..700;1,9..144,400..600&family=Inter:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="app">
+  <aside id="panel" data-sheet="half" aria-label="Atlas controls">
+    <button id="sheetHandle" class="sheet-handle" type="button" aria-label="Expand or collapse the panel" aria-expanded="true"><span></span></button>
+
+    <header class="brand">
+      <h1>Virasat Atlas <span lang="hi" class="brand-hi">विरासत</span></h1>
+      <p class="tagline">Field notes from Gujarat's heritage, placed on the map.</p>
+      <dl class="stats" id="stats" aria-label="Archive size">
+        <div><dt>sites</dt><dd id="statSites">0</dd></div>
+        <div><dt>field entries</dt><dd id="statEntries">0</dd></div>
+        <div><dt>languages</dt><dd id="statLangs">0</dd></div>
+      </dl>
+    </header>
+
+    <div class="scroll">
+      <div class="actions">
+        <button id="btnAddEntry" class="btn terracotta" type="button">Add field entry</button>
+        <button id="btnOcr" class="btn outline" type="button">Digitise document</button>
+      </div>
+
+      <section class="block" aria-labelledby="searchLabel">
+        <label id="searchLabel" for="q" class="sr-only">Search the archive</label>
+        <div class="search">
+          <input id="q" type="search" autocomplete="off" spellcheck="false" placeholder="Search in English, हिन्दी or ગુજરાતી">
+        </div>
+        <p id="status" class="status" role="status" aria-live="polite"></p>
+      </section>
+
+      <details class="sect" open>
+        <summary>Filters</summary>
+        <div class="filter-group">
+          <p class="group-title" id="ftTypes">Site type</p>
+          <div class="chips" id="chipTypes" role="group" aria-labelledby="ftTypes"></div>
+        </div>
+        <div class="filter-group">
+          <p class="group-title" id="ftEras">Era</p>
+          <div class="chips" id="chipEras" role="group" aria-labelledby="ftEras"></div>
+        </div>
+        <div class="filter-group">
+          <p class="group-title" id="ftThemes">Theme</p>
+          <div class="chips" id="chipThemes" role="group" aria-labelledby="ftThemes"></div>
+        </div>
+        <div class="filter-group">
+          <button id="chipUnesco" class="chip" type="button" aria-pressed="false">UNESCO World Heritage only</button>
+          <button id="clearFilters" class="link" type="button" hidden>Clear filters</button>
+        </div>
+      </details>
+
+      <details class="sect" id="trailSect">
+        <summary>Build a trail</summary>
+        <form id="trailForm" class="stack" novalidate>
+          <label class="field">Theme
+            <select id="trailTheme"><option value="">Any theme</option></select>
+          </label>
+          <label class="field">Stops
+            <input id="trailStops" type="number" min="2" max="15" value="6" inputmode="numeric">
+          </label>
+          <label class="check"><input id="trailLoc" type="checkbox"> Start from my location</label>
+          <button class="btn primary" type="submit" id="trailGo">Build trail</button>
+        </form>
+        <div id="trailOut" class="trail-out" aria-live="polite"></div>
+      </details>
+
+      <section class="block" aria-labelledby="listTitle">
+        <h2 id="listTitle" class="list-title">Sites on the map</h2>
+        <ul id="results" class="results"></ul>
+      </section>
+    </div>
+  </aside>
+
+  <main id="map" aria-label="Map of Gujarat heritage sites"></main>
+
+  <details id="legend" open>
+    <summary>Legend</summary>
+    <ul id="legendList"></ul>
+    <p class="legend-note"><span class="ring"></span> Gold ring: UNESCO World Heritage</p>
+  </details>
+
+  <section id="timeline" aria-label="Filter sites by century">
+    <div class="tl-head">
+      <strong id="tlLabel">All centuries</strong>
+      <button id="tlReset" class="link" type="button" hidden>Reset</button>
+    </div>
+    <div class="tl-bars" id="tlBars" aria-hidden="true"></div>
+    <div class="tl-sliders">
+      <input id="tlFrom" type="range" min="-30" max="20" step="1" value="-30" aria-label="Earliest century">
+      <input id="tlTo" type="range" min="-30" max="20" step="1" value="20" aria-label="Latest century">
+    </div>
+    <div class="tl-axis" aria-hidden="true"><span>30th c. BCE</span><span>1st c.</span><span>20th c.</span></div>
+  </section>
+
+  <aside id="drawer" tabindex="-1" aria-label="Site details" hidden></aside>
+
+  <div id="pickBanner" role="status" hidden>
+    <span>Click the map to place the entry.</span>
+    <button id="pickCancel" class="btn small outline" type="button">Cancel</button>
+  </div>
+</div>
+
+<dialog id="entryDlg" aria-labelledby="entryH">
+  <form id="entryForm" class="dlg" novalidate>
+    <header class="dlg-head">
+      <h2 id="entryH">Add field entry</h2>
+      <button class="x" type="button" data-close aria-label="Close">&times;</button>
+    </header>
+    <label class="field">Title
+      <input id="eTitle" name="title" required maxlength="300" autocomplete="off">
+    </label>
+    <label class="field">Notes
+      <textarea id="eBody" name="body" rows="5" required placeholder="What did you see, hear or read here? Any language works."></textarea>
+    </label>
+    <div class="tagbox">
+      <p class="group-title">Tags found in your text</p>
+      <div id="eTags" class="tags" aria-live="polite"></div>
+    </div>
+    <div class="row2">
+      <label class="field">Kind
+        <select id="eKind" name="kind">
+          <option value="journal">Journal</option>
+          <option value="photo">Photo</option>
+          <option value="document">Document</option>
+          <option value="folklore">Folklore</option>
+        </select>
+      </label>
+      <label class="field">Author
+        <input id="eAuthor" name="author" maxlength="100" autocomplete="name">
+      </label>
+    </div>
+    <label class="field">Site
+      <select id="eSite"><option value="">Match to the nearest site automatically</option></select>
+    </label>
+    <div class="field">
+      <span class="lbl">Location</span>
+      <div class="loc-row">
+        <button id="ePick" class="btn outline small" type="button">Drop a pin on the map</button>
+        <span id="eLoc" class="muted">No location set</span>
+        <button id="eLocClear" class="link" type="button" hidden>Remove</button>
+      </div>
+    </div>
+    <label class="field">Photo
+      <input id="eImage" type="file" accept="image/jpeg,image/png,image/webp,image/gif">
+    </label>
+    <p id="eErr" class="err" role="alert" hidden></p>
+    <footer class="dlg-foot">
+      <button class="btn outline" type="button" id="eCancel">Cancel</button>
+      <button class="btn terracotta" type="submit" id="eSave">Save entry</button>
+    </footer>
+  </form>
+</dialog>
+
+<dialog id="ocrDlg" aria-labelledby="ocrH">
+  <form id="ocrForm" class="dlg" novalidate>
+    <header class="dlg-head">
+      <h2 id="ocrH">Digitise document</h2>
+      <button class="x" type="button" data-close aria-label="Close">&times;</button>
+    </header>
+    <p class="muted">Upload a scan or photo of a printed or handwritten page. The text is read, tagged and can be saved as a searchable entry.</p>
+    <label class="field">Scan or photo
+      <input id="oFile" type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/tiff">
+    </label>
+    <label class="field">Language of the page
+      <select id="oLang">
+        <option value="hin+eng">Hindi and English</option>
+        <option value="guj+eng">Gujarati and English</option>
+        <option value="eng">English</option>
+      </select>
+    </label>
+    <button id="oRead" class="btn primary" type="button">Read text</button>
+    <p id="oErr" class="err" role="alert" hidden></p>
+
+    <div id="oResult" hidden>
+      <label class="field">Recognised text <span class="muted">(edit anything the scan got wrong)</span>
+        <textarea id="oText" rows="8"></textarea>
+      </label>
+      <div class="tagbox">
+        <p class="group-title">Tags found in the text</p>
+        <div id="oTags" class="tags" aria-live="polite"></div>
+      </div>
+      <div class="row2">
+        <label class="field">Title
+          <input id="oTitle" maxlength="300" placeholder="Digitised document" autocomplete="off">
+        </label>
+        <label class="field">Author
+          <input id="oAuthor" maxlength="100" autocomplete="name">
+        </label>
+      </div>
+      <label class="field">Site
+        <select id="oSite"><option value="">Leave unattached</option></select>
+      </label>
+      <footer class="dlg-foot">
+        <button class="btn outline" type="button" data-close>Close</button>
+        <button class="btn terracotta" type="submit" id="oSave">Save as entry</button>
+      </footer>
+    </div>
+  </form>
+</dialog>
+
+<div id="toast" role="status" aria-live="polite" hidden></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script src="app.js"></script>
+</body>
+</html>
