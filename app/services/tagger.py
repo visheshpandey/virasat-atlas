@@ -1,7 +1,7 @@
 """Multilingual auto-tagger for heritage text (English, Hindi, Gujarati).
 
 Layer 1 is a deterministic rule engine and always runs. Layer 2 is optional: when
-ANTHROPIC_API_KEY is set, a language model fills fields the rules left empty. Layer 2
+GEMINI_API_KEY is set, Google Gemini fills fields the rules left empty. Layer 2
 failures are swallowed so ingest never breaks because of it.
 
 Matching rules:
@@ -354,18 +354,31 @@ def _parse_json_object(text: str) -> Any:
     return json.loads(text[start: end + 1])
 
 
-async def _call_claude(text: str) -> dict | None:
-    """Ask the model for tags. Raises on any API problem; the caller handles it."""
-    import anthropic
+GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
-    client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY, timeout=10.0, max_retries=1)
-    message = await client.messages.create(
-        model=settings.ANTHROPIC_MODEL,
-        max_tokens=300,
-        system=_SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": text[:4000]}],
-    )
-    raw = "".join(b.text for b in message.content if getattr(b, "type", "") == "text")
+
+async def _call_gemini(text: str) -> dict | None:
+    """Ask Gemini for tags over HTTPS. Raises on any API problem; the caller handles it."""
+    import httpx
+
+    body = {
+        "systemInstruction": {"parts": [{"text": _SYSTEM_PROMPT}]},
+        "contents": [{"role": "user", "parts": [{"text": text[:4000]}]}],
+        "generationConfig": {
+            "responseMimeType": "application/json",
+            "temperature": 0,
+            "maxOutputTokens": 300,
+        },
+    }
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        resp = await client.post(
+            GEMINI_URL.format(model=settings.GEMINI_MODEL),
+            headers={"x-goog-api-key": settings.GEMINI_API_KEY},
+            json=body,
+        )
+    resp.raise_for_status()
+    parts = resp.json()["candidates"][0]["content"]["parts"]
+    raw = "".join(p.get("text", "") for p in parts)
     return _clean_model_output(_parse_json_object(raw))
 
 
@@ -377,7 +390,7 @@ def _merge(rules: dict, extra: dict) -> dict:
             merged[key] = extra[key]
     union = set(rules["themes"]) | set(extra.get("themes", []))
     merged["themes"] = [th for th in THEMES if th in union]
-    merged["source"] = "rules+claude"
+    merged["source"] = "rules+gemini"
     return merged
 
 
@@ -404,14 +417,14 @@ def _cache_put(key: str, value: dict | None) -> None:
 async def tag_text(text: str) -> dict:
     """Layer 1 plus the optional model layer. Never raises because of the model call."""
     rules = tag_rules(text)
-    if not settings.ANTHROPIC_API_KEY or not text.strip():
+    if not settings.GEMINI_API_KEY or not text.strip():
         return rules
 
     key = hashlib.sha256(text.encode("utf-8")).hexdigest()
     hit, extra = _cache_get(key)
     if not hit:
         try:
-            extra = await asyncio.wait_for(_call_claude(text), timeout=15.0)
+            extra = await asyncio.wait_for(_call_gemini(text), timeout=15.0)
         except Exception as exc:  # network, auth, rate limit, bad JSON: all fall back to rules
             logger.warning(f"model_tagging_failed error={type(exc).__name__}")
             extra = None

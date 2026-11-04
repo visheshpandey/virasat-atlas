@@ -22,7 +22,7 @@ services:
       DATABASE_URL: postgresql+asyncpg://virasat:virasat@db:5432/virasat
       SECRET_KEY: ${SECRET_KEY:-dev-only-insecure-secret-change-me}
       APP_ENV: ${APP_ENV:-development}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       SEMANTIC_MODEL: ${SEMANTIC_MODEL:-}
       MEDIA_DIR: /srv/media
     ports:

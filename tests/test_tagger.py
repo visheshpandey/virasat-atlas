@@ -143,7 +143,7 @@ def test_themes_follow_canonical_order():
 # --- model layer ---
 @pytest.fixture
 def with_key(monkeypatch):
-    monkeypatch.setattr(settings, "ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setattr(settings, "GEMINI_API_KEY", "test-key")
     tagger._cache.clear()
     yield
     tagger._cache.clear()
@@ -153,8 +153,8 @@ def test_without_key_model_is_never_called(monkeypatch):
     async def boom(_):
         raise AssertionError("must not be called")
 
-    monkeypatch.setattr(settings, "ANTHROPIC_API_KEY", "")
-    monkeypatch.setattr(tagger, "_call_claude", boom)
+    monkeypatch.setattr(settings, "GEMINI_API_KEY", "")
+    monkeypatch.setattr(tagger, "_call_gemini", boom)
     assert asyncio.run(tag_text("An old stepwell"))["source"] == "rules"
 
 
@@ -162,20 +162,20 @@ def test_model_fills_gaps_but_keeps_rules(monkeypatch, with_key):
     async def fake(_):
         return {"site_type": "temple", "era": "Mughal", "century": 17, "themes": ["pilgrimage"]}
 
-    monkeypatch.setattr(tagger, "_call_claude", fake)
+    monkeypatch.setattr(tagger, "_call_gemini", fake)
     tags = asyncio.run(tag_text("An old stepwell near the river"))
     assert tags["site_type"] == "stepwell"  # rules win
     assert tags["era"] == "Mughal"  # gap filled
     assert tags["century"] == 17
     assert "pilgrimage" in tags["themes"] and "water-architecture" in tags["themes"]
-    assert tags["source"] == "rules+claude"
+    assert tags["source"] == "rules+gemini"
 
 
 def test_model_failure_never_breaks_tagging(monkeypatch, with_key):
     async def fail(_):
         raise RuntimeError("network down")
 
-    monkeypatch.setattr(tagger, "_call_claude", fail)
+    monkeypatch.setattr(tagger, "_call_gemini", fail)
     tags = asyncio.run(tag_text("An old stepwell"))
     assert tags["site_type"] == "stepwell"
     assert tags["source"] == "rules"
@@ -188,7 +188,7 @@ def test_model_result_is_cached(monkeypatch, with_key):
         calls.append(text)
         return {"era": "Mughal"}
 
-    monkeypatch.setattr(tagger, "_call_claude", fake)
+    monkeypatch.setattr(tagger, "_call_gemini", fake)
     asyncio.run(tag_text("A hilltop shrine"))
     asyncio.run(tag_text("A hilltop shrine"))
     assert len(calls) == 1
@@ -201,7 +201,7 @@ def test_model_failure_is_cached_briefly(monkeypatch, with_key):
         calls.append(text)
         raise RuntimeError("boom")
 
-    monkeypatch.setattr(tagger, "_call_claude", fail)
+    monkeypatch.setattr(tagger, "_call_gemini", fail)
     asyncio.run(tag_text("A hilltop shrine"))
     asyncio.run(tag_text("A hilltop shrine"))
     assert len(calls) == 1
@@ -214,3 +214,31 @@ def test_model_output_is_validated():
     assert cleaned == {"era": "Mughal", "themes": ["royalty"]}
     assert tagger._clean_model_output("not a dict") is None
     assert tagger._parse_json_object('Sure! {"era": "Mughal"} done') == {"era": "Mughal"}
+
+
+def test_gemini_request_shape_and_parsing(monkeypatch):
+    """_call_gemini sends the key as a header, asks for JSON, and validates the reply."""
+    import httpx
+
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
+        seen["key"] = request.headers.get("x-goog-api-key")
+        seen["body"] = request.read().decode()
+        reply = {"candidates": [{"content": {"parts": [{"text": '{"site_type": "fort", "century": 15, "themes": ["royalty", "bogus"]}'}]}}]}
+        return httpx.Response(200, json=reply)
+
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(
+        httpx, "AsyncClient",
+        lambda **kw: real_client(transport=httpx.MockTransport(handler), **kw),
+    )
+    monkeypatch.setattr(settings, "GEMINI_API_KEY", "test-key")
+
+    out = asyncio.run(tagger._call_gemini("A fort built in 1450"))
+
+    assert out == {"site_type": "fort", "century": 15, "themes": ["royalty"]}
+    assert seen["key"] == "test-key"
+    assert ":generateContent" in seen["url"] and "test-key" not in seen["url"]
+    assert "responseMimeType" in seen["body"]

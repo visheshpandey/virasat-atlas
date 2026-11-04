@@ -23,8 +23,8 @@ class Settings(BaseSettings):
     MEDIA_DIR: str = str(BASE_DIR / "media")
     MAX_UPLOAD_MB: int = 8
 
-    ANTHROPIC_API_KEY: str = ""
-    ANTHROPIC_MODEL: str = "claude-sonnet-5-5"
+    GEMINI_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemini-2.0-flash"
     SEMANTIC_MODEL: str = ""
     TESSERACT_CMD: str = ""
     TESSDATA_PREFIX: str = ""

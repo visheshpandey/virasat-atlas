@@ -9,7 +9,7 @@ _tmp = tempfile.mkdtemp(prefix="virasat-test-")
 os.environ["DATABASE_URL"] = f"sqlite+aiosqlite:///{Path(_tmp, 'test.db').as_posix()}"
 os.environ["MEDIA_DIR"] = str(Path(_tmp, "media"))
 os.environ["APP_ENV"] = "test"
-os.environ["ANTHROPIC_API_KEY"] = ""
+os.environ["GEMINI_API_KEY"] = ""
 os.environ["SEMANTIC_MODEL"] = ""
 
 import pytest  # noqa: E402

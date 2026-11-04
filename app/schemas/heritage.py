@@ -37,7 +37,7 @@ class TagOut(BaseModel):
     century: int | None = None  # negative = BCE
     themes: list[str] = []
     language: Language = "en"
-    source: str = "rules"  # "rules" or "rules+claude"
+    source: str = "rules"  # "rules" or "rules+gemini"
 
 
 # --- Entries ---
