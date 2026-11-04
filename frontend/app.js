@@ -21,6 +21,7 @@
   const state = {
     sites: [],
     meta: null,
+    region: 'gujarat',   // state slug, or 'all' for All India
     markers: new Map(),
     selectedId: null,
     filters: { types: new Set(), eras: new Set(), themes: new Set(), unesco: false, from: C_MIN, to: C_MAX },
@@ -105,7 +106,7 @@
   }
 
   /* ---------- map ---------- */
-  const map = L.map('map', { zoomControl: false, minZoom: 6, maxZoom: 17 }).setView([22.4, 71.6], 7);
+  const map = L.map('map', { zoomControl: false, minZoom: 4, maxZoom: 17 }).setView([22.4, 71.6], 7);
   L.control.zoom({ position: 'topright' }).addTo(map);
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
@@ -121,9 +122,9 @@
     const shift = isMobile() ? L.point(0, window.innerHeight * 0.18) : L.point(-190, 0);
     map.flyTo(map.unproject(p.add(shift), z), z, { duration: 0.8 });
   }
-  function fitTo(bounds) {
+  function fitTo(bounds, fly = false) {
     const mobile = isMobile();
-    map.fitBounds(bounds, {
+    (fly ? map.flyToBounds : map.fitBounds).call(map, bounds, {
       paddingTopLeft: mobile ? [30, 130] : [Number.parseInt(getComputedStyle(document.documentElement).getPropertyValue('--panel-w'), 10) + 40, 40],
       paddingBottomRight: mobile ? [30, window.innerHeight * 0.5] : [40, 170],
       maxZoom: 12,
@@ -307,7 +308,7 @@
     const mine = ++searchSeq;
     statusEl.textContent = 'Searching…';
     try {
-      const r = await api(`/search?q=${encodeURIComponent(text)}&k=12`);
+      const r = await api(`/search?q=${encodeURIComponent(text)}&k=12${regionQuery('&')}`);
       if (mine === searchSeq) renderResults(r.results || [], text);
     } catch (e) {
       if (mine === searchSeq) {
@@ -772,14 +773,67 @@
     $('#statLangs').textContent = m ? m.languages.filter((l) => l.count > 0).length : 0;
   }
 
+  /* ---------- region ---------- */
+  const INDIA_BOUNDS = [[6.5, 68.0], [35.7, 97.5]];
+  const regionQuery = (lead) => (state.region === 'all' ? '' : `${lead}state=${encodeURIComponent(state.region)}`);
+  const hashRegion = () => new URLSearchParams(location.hash.slice(1)).get('state');
+
+  /** Pick a valid region: the wanted one if it exists, else Gujarat, else All India. */
+  function resolveRegion(states, wanted) {
+    const slugs = new Set(states.map((s) => s.slug));
+    const w = (wanted || '').toLowerCase();
+    if (w === 'all') return 'all';
+    if (slugs.has(w)) return w;
+    return slugs.has('gujarat') ? 'gujarat' : 'all';
+  }
+  function setHash() {
+    try { history.replaceState(null, '', `#state=${encodeURIComponent(state.region)}`); } catch (_) { /* file:// or sandbox */ }
+  }
+  function regionName() {
+    if (state.region === 'all') return 'India';
+    const s = ((state.meta && state.meta.states) || []).find((x) => x.slug === state.region);
+    return s ? s.value : humanize(state.region);
+  }
+  function buildRegionSelect() {
+    const states = (state.meta && state.meta.states) || [];
+    const total = states.reduce((n, s) => n + s.count, 0);
+    const sel = $('#region');
+    sel.replaceChildren(
+      h('option', { value: 'all', text: `All India (${total})` }),
+      ...states.map((s) => h('option', { value: s.slug, text: `${s.value} (${s.count})` })));
+    sel.value = state.region;
+    const name = regionName();
+    $('#tagline').textContent = `Field notes from ${state.region === 'all' ? "India's" : `${name}'s`} heritage, placed on the map.`;
+  }
+  function flyToRegion(fly = true) {
+    if (state.region === 'all') fitTo(L.latLngBounds(INDIA_BOUNDS), fly);
+    else if (state.sites.length) fitTo(L.latLngBounds(state.sites.map((s) => [s.lat, s.lng])), fly);
+  }
+  async function applyRegion(slug, { fly = true } = {}) {
+    state.region = slug;
+    setHash();
+    closeDrawer();
+    map.closePopup();
+    clearTrail();
+    $('#clearFilters').click();   // old chip choices may not exist in the new region
+    await refreshData();
+    flyToRegion(fly);
+  }
+  $('#region').addEventListener('change', (e) => applyRegion(e.target.value).catch(() => {}));
+  window.addEventListener('hashchange', () => {
+    const next = resolveRegion((state.meta && state.meta.states) || [], hashRegion());
+    if (next !== state.region) applyRegion(next).catch(() => {});
+  });
+
   async function refreshData() {
     const [meta, sites] = await Promise.all([
-      api('/meta').catch(() => null),
-      api('/sites?limit=500'),
+      api(`/meta?${regionQuery('').replace(/^&/, '')}`).catch(() => null),
+      api(`/sites?limit=500${regionQuery('&')}`),
     ]);
     state.meta = meta;
     state.sites = sites.items || [];
     renderStats();
+    buildRegionSelect();
     buildFilters();
     // Re-apply pressed state after chips are rebuilt.
     for (const [group, id] of [['types', '#chipTypes'], ['eras', '#chipEras'], ['themes', '#chipThemes']]) {
@@ -800,10 +854,12 @@
     updateTimelineLabel();
     renderTimelineBars();
     try {
+      const all = await api('/meta');   // unscoped, to learn which states exist
+      state.meta = all;
+      state.region = resolveRegion(all.states || [], hashRegion());
+      setHash();
       await refreshData();
-      if (state.sites.length) {
-        fitTo(L.latLngBounds(state.sites.map((s) => [s.lat, s.lng])));
-      }
+      flyToRegion(false);
     } catch (e) {
       statusEl.textContent = '';
       listTitle.textContent = 'Sites on the map';

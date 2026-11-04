@@ -18,6 +18,7 @@ Virasat Atlas ingests a note, a photo or a scanned page, **tags it automatically
 ## Features
 
 - Interactive Leaflet map of Gujarat, colour-coded by site type, UNESCO sites ringed in gold, detail drawer with folklore and field entries
+- Region selector: "All India" plus every state that has sites, each with its site count. It scopes the map, site list, search, timeline and stats, defaults to Gujarat, and is kept in the URL (`#state=gujarat`, `#state=all`)
 - Site photos: the backend looks up a representative photo for each site on Wikipedia / Wikimedia Commons (cached 10 minutes, credited in the drawer, silently skipped if unavailable)
 - Multilingual auto-tagger (English, Devanagari, Gujarati) with century and BCE extraction and script detection; optional LLM layer when an API key is set
 - Hybrid search: word TF-IDF (0.6) + character n-gram TF-IDF (0.4), so Hindi, Gujarati, transliteration and typos all work; optional dense layer via `SEMANTIC_MODEL`
@@ -61,6 +62,7 @@ erDiagram
         string era
         int century "negative = BCE"
         string district
+        string state "e.g. Gujarat"
         float lat
         float lng
         text description
@@ -77,6 +79,7 @@ erDiagram
         string kind "journal|photo|document|folklore|ocr"
         string language "en|hi|gu"
         string author
+        string state "from the site, else the nearest site"
         float lat
         float lng
         string image_path
@@ -93,8 +96,8 @@ On PostgreSQL a generated `geog` geography column and a GIST index are added to 
 | Method | Path | Purpose | Auth |
 |---|---|---|---|
 | GET | `/health` | Liveness | no |
-| GET | `/meta` | Types, eras, themes, languages with counts | no |
-| GET | `/sites` | List; filters `type`, `era`, `theme`, `unesco` | no |
+| GET | `/meta` | Types, eras, themes, languages and `states` (with slug and site count); optional `state` scopes the counts | no |
+| GET | `/sites` | List; filters `type`, `era`, `theme`, `unesco`, `state` | no |
 | GET | `/sites/nearby` | `lat`, `lng`, `radius_km` | no |
 | GET | `/sites/{id}` | Site with its entries | no |
 | GET | `/sites/{id}/image` | Representative photo (Wikipedia / Commons), nulls if none | no |
@@ -102,7 +105,7 @@ On PostgreSQL a generated `geog` geography column and a GIST index are added to 
 | POST | `/entries` | Multipart: title, body, kind, author, optional site_id, lat/lng, image | no |
 | GET | `/entries/{id}` | One entry | no |
 | POST | `/tag` | `{text}` to site type, era, century, themes, language | no |
-| GET | `/search` | `q`, `k`: hybrid search over sites and entries | no |
+| GET | `/search` | `q`, `k`, optional `state`: hybrid search over sites and entries | no |
 | POST | `/trails` | `site_ids` or `theme`, optional start, `max_stops` 2-15 | no |
 | POST | `/ocr` | Image upload (`file`, optional `lang`, default `hin+eng`) | no |
 | POST | `/auth/register`, `/auth/login` | Accounts and tokens | no |
@@ -179,6 +182,9 @@ Tests use a temporary SQLite database and cover the tagger (stepwell, Hindi, cen
 - OCR quality depends on the scan. Printed Hindi works far better than handwriting or old manuscripts.
 - The PostGIS nearby query and the Docker setup are untested locally.
 - Site photos come live from Wikipedia / Wikimedia Commons, so they need internet access and are matched by site name; licences are on each photo's source page. Always check a match before relying on it.
+- The demo data covers Gujarat only, so the region selector offers just "All India" and "Gujarat" until sites in other states are added. A state's map view is fitted to its sites' coordinates, not its official boundary.
+- Trails are not scoped by region: a theme trail can draw on sites from any state.
+- A new site or entry without a `state` takes the state of the nearest existing site, which can be wrong near a state border; pass `state` explicitly to override it.
 - Seed content is demo data (see the notice at the top).
 
 ## Roadmap
