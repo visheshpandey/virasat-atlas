@@ -12,9 +12,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.models.entry import Entry
 from app.models.site import Site
-from app.schemas.heritage import EntryKind, EntryOut, TagOut
+from sqlalchemy import func, select
+
+from app.schemas.heritage import EntryKind, EntryOut, EntryList, TagOut
 from app.services import tagger
 from app.utils.logger import get_logger
+from app.utils.states import state_key
 
 logger = get_logger(__name__)
 
@@ -111,7 +114,7 @@ async def create_entry(
     nearest site at any distance. The search index is rebuilt after the write.
     """
     # Imported here: site_service imports this module for entry_out.
-    from app.services.site_service import nearest_site, nearest_state, reindex
+    from app.services.site_service import canonical_state, nearest_site, nearest_state, reindex
 
     if kind not in get_args(EntryKind):
         raise HTTPException(
@@ -142,9 +145,9 @@ async def create_entry(
         site = await nearest_site(db, lat_v, lng_v, AUTO_ATTACH_KM)
         auto_attached = site is not None
 
-    state = (state or "").strip() or None
-    if state is not None and len(state) > 60:
+    if len((state or "").strip()) > 60:
         raise HTTPException(status_code=422, detail="state must be at most 60 characters")
+    state = await canonical_state(db, state)
     if state is None:
         if site is not None:
             state = site.state
@@ -182,6 +185,20 @@ async def create_entry(
     logger.info(f"entry_created id={entry.id} kind={kind} site={entry.site_id} auto={auto_attached}")
     await reindex(db)
     return entry_out(entry, auto_attached)
+
+
+async def list_entries(
+    db: AsyncSession, state: str | None = None, unattached: bool = False, limit: int = 500
+) -> EntryList:
+    """Newest entries first. `unattached` keeps entries with coordinates but no site (map dots)."""
+    stmt = select(Entry).order_by(Entry.created_at.desc()).limit(limit)
+    key = state_key(state)
+    if key:
+        stmt = stmt.where(func.lower(Entry.state) == key)
+    if unattached:
+        stmt = stmt.where(Entry.site_id.is_(None), Entry.lat.is_not(None), Entry.lng.is_not(None))
+    items = [entry_out(e) for e in (await db.execute(stmt)).scalars().all()]
+    return EntryList(items=items, total=len(items))
 
 
 async def get_entry(db: AsyncSession, entry_id: uuid.UUID) -> EntryOut:

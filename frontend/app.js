@@ -20,6 +20,7 @@
 
   const state = {
     sites: [],
+    looseEntries: [],
     meta: null,
     region: 'gujarat',   // state slug, or 'all' for All India
     markers: new Map(),
@@ -114,6 +115,7 @@
   }).addTo(map);
   const markerLayer = L.layerGroup().addTo(map);
   const trailLayer = L.layerGroup().addTo(map);
+  const entryLayer = L.layerGroup().addTo(map);   // located entries that belong to no site
 
   /** Centre a point in the visible part of the map, not behind the panel or sheet. */
   function focusOn(lat, lng, zoom = 12) {
@@ -250,7 +252,7 @@
     listTitle.textContent = list.length === state.sites.length ? 'Sites on the map' : `Sites matching your filters`;
     statusEl.textContent = state.sites.length ? `${list.length} of ${state.sites.length} sites shown` : '';
     if (!list.length) {
-      resultsEl.replaceChildren(h('li', { class: 'empty', text: state.sites.length ? 'No sites match these filters. Widen the century range or clear a filter.' : 'No sites loaded yet.' }));
+      resultsEl.replaceChildren(h('li', { class: 'empty', text: state.sites.length ? 'No sites match these filters. Widen the century range or clear a filter.' : state.looseEntries.length ? `No heritage sites recorded here yet. ${state.looseEntries.length === 1 ? 'The field entry is shown as a hollow dot' : 'Field entries are shown as hollow dots'} on the map.` : 'No sites loaded yet.' }));
       return;
     }
     resultsEl.replaceChildren(...list
@@ -344,7 +346,9 @@
     const sel = $('#trailTheme');
     sel.replaceChildren(h('option', { value: '', text: 'Any theme' }), ...themes.map((t) => h('option', { value: t.value, text: humanize(t.value) })));
 
-    $('#legendList').replaceChildren(...Object.keys(TYPE_LABELS).map((t) => h('li', null, dotFor(t), TYPE_LABELS[t])));
+    $('#legendList').replaceChildren(
+      ...Object.keys(TYPE_LABELS).map((t) => h('li', null, dotFor(t), TYPE_LABELS[t])),
+      h('li', null, h('i', { class: 'dot entry-dot' }), 'Field entry, no site yet'));
   }
 
   $('#chipUnesco').addEventListener('click', (e) => {
@@ -663,6 +667,7 @@
     fd.append('kind', $('#eKind').value);
     if ($('#eAuthor').value.trim()) fd.append('author', $('#eAuthor').value.trim());
     if ($('#eSite').value) fd.append('site_id', $('#eSite').value);
+    if ($('#eState').value.trim()) fd.append('state', $('#eState').value.trim());
     if (state.pick) { fd.append('lat', String(state.pick.lat)); fd.append('lng', String(state.pick.lng)); }
     if (file) fd.append('image', file);
 
@@ -673,11 +678,17 @@
       const pick = state.pick;
       resetEntryForm();
       entryDlg.close();
-      await refreshData();
+      // An entry saved to another state would be invisible here, so follow it there.
+      if (state.region !== 'all' && saved.state && slugOf(saved.state) !== state.region) {
+        await applyRegion(slugOf(saved.state), { fly: false });
+      } else {
+        await refreshData();
+      }
       const site = saved.site_id && siteById(saved.site_id);
       toast(site ? (saved.auto_attached ? `Entry saved and matched to ${site.name}.` : `Entry saved to ${site.name}.`) : 'Entry saved.');
       if (site) { if (isMobile()) setSheet('peek'); focusOn(site.lat, site.lng, 12); openSite(site.id, { fly: false }); }
       else if (pick) focusOn(pick.lat, pick.lng, 12);
+      else if (saved.lat != null) focusOn(saved.lat, saved.lng, 12);
     } catch (e) {
       err.textContent = `Could not save: ${e.message}`; err.hidden = false;
     } finally {
@@ -773,7 +784,26 @@
     $('#statLangs').textContent = m ? m.languages.filter((l) => l.count > 0).length : 0;
   }
 
+  /* ---------- entries that are not at a known site ---------- */
+  function entryPopup(e) {
+    return h('div', { class: 'entry-pop' },
+      h('strong', { text: e.title }),
+      h('span', { class: 'muted', text: [e.author ? `By ${e.author}` : null, e.state].filter(Boolean).join(' · ') }),
+      e.body ? h('p', { text: e.body.length > 220 ? `${e.body.slice(0, 220)}…` : e.body }) : null,
+      e.image_url ? h('img', { src: e.image_url, alt: `Photo for ${e.title}`, loading: 'lazy' }) : null);
+  }
+  function renderEntryMarkers() {
+    entryLayer.clearLayers();
+    for (const e of state.looseEntries) {
+      const m = L.circleMarker([e.lat, e.lng], { radius: 7, color: '#B5451B', weight: 3, fillColor: '#FFF8E8', fillOpacity: 0.95 });
+      m.bindTooltip(h('span', { text: e.title }), { direction: 'top', offset: [0, -6] });
+      m.bindPopup(() => entryPopup(e));
+      m.addTo(entryLayer);
+    }
+  }
+
   /* ---------- region ---------- */
+  const slugOf = (name) => String(name).trim().toLowerCase().split(/\s+/).join('-');
   const INDIA_BOUNDS = [[6.5, 68.0], [35.7, 97.5]];
   const regionQuery = (lead) => (state.region === 'all' ? '' : `${lead}state=${encodeURIComponent(state.region)}`);
   const hashRegion = () => new URLSearchParams(location.hash.slice(1)).get('state');
@@ -802,12 +832,16 @@
       h('option', { value: 'all', text: `All India (${total})` }),
       ...states.map((s) => h('option', { value: s.slug, text: `${s.value} (${s.count})` })));
     sel.value = state.region;
+    $('#stateList').replaceChildren(...states.map((s) => h('option', { value: s.value })));
     const name = regionName();
     $('#tagline').textContent = `Field notes from ${state.region === 'all' ? "India's" : `${name}'s`} heritage, placed on the map.`;
   }
   function flyToRegion(fly = true) {
     if (state.region === 'all') fitTo(L.latLngBounds(INDIA_BOUNDS), fly);
-    else if (state.sites.length) fitTo(L.latLngBounds(state.sites.map((s) => [s.lat, s.lng])), fly);
+    else {
+      const points = [...state.sites, ...state.looseEntries].map((p) => [p.lat, p.lng]);
+      if (points.length) fitTo(L.latLngBounds(points), fly);
+    }
   }
   async function applyRegion(slug, { fly = true } = {}) {
     state.region = slug;
@@ -826,12 +860,14 @@
   });
 
   async function refreshData() {
-    const [meta, sites] = await Promise.all([
+    const [meta, sites, loose] = await Promise.all([
       api(`/meta?${regionQuery('').replace(/^&/, '')}`).catch(() => null),
       api(`/sites?limit=500${regionQuery('&')}`),
+      api(`/entries?unattached=true${regionQuery('&')}`).catch(() => ({ items: [] })),
     ]);
     state.meta = meta;
     state.sites = sites.items || [];
+    state.looseEntries = loose.items || [];
     renderStats();
     buildRegionSelect();
     buildFilters();
@@ -846,6 +882,7 @@
       });
     }
     renderMarkers();
+    renderEntryMarkers();
     if (state.query) runSearch();
   }
 

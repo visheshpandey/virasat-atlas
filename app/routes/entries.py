@@ -1,11 +1,11 @@
 """Field entry endpoints. Submission is open: the capture form has no login."""
 import uuid
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
-from app.schemas.heritage import EntryOut
+from app.schemas.heritage import EntryList, EntryOut
 from app.services import entry_service
 
 router = APIRouter(prefix="/entries", tags=["entries"])
@@ -41,6 +41,16 @@ async def create_entry(
         image=image,
         state=state,
     )
+
+
+@router.get("", response_model=EntryList)
+async def list_entries(
+    state: str | None = Query(default=None, max_length=60),
+    unattached: bool = False,
+    db: AsyncSession = Depends(get_db),
+) -> EntryList:
+    """Entries, newest first. `unattached=true` returns only located entries with no site."""
+    return await entry_service.list_entries(db, state, unattached)
 
 
 @router.get("/{entry_id}", response_model=EntryOut)

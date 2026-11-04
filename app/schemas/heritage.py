@@ -61,6 +61,11 @@ class EntryOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class EntryList(BaseModel):
+    items: list[EntryOut]
+    total: int
+
+
 # --- Sites ---
 class SiteCreate(BaseModel):
     name: str = Field(min_length=1, max_length=200)

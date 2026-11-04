@@ -18,6 +18,7 @@ Virasat Atlas ingests a note, a photo or a scanned page, **tags it automatically
 ## Features
 
 - Interactive Leaflet map of Gujarat, colour-coded by site type, UNESCO sites ringed in gold, detail drawer with folklore and field entries
+- Field entries at no known site appear as hollow dots on the map; the entry form has a State field (with suggestions), so you can record a state that has no sites yet and it joins the region list
 - Region selector: "All India" plus every state that has sites, each with its site count. It scopes the map, site list, search, timeline and stats, defaults to Gujarat, and is kept in the URL (`#state=gujarat`, `#state=all`)
 - Site photos: the backend looks up a representative photo for each site on Wikipedia / Wikimedia Commons (cached 10 minutes, credited in the drawer, silently skipped if unavailable)
 - Multilingual auto-tagger (English, Devanagari, Gujarati) with century and BCE extraction and script detection; optional LLM layer when an API key is set
@@ -102,7 +103,8 @@ On PostgreSQL a generated `geog` geography column and a GIST index are added to 
 | GET | `/sites/{id}` | Site with its entries | no |
 | GET | `/sites/{id}/image` | Representative photo (Wikipedia / Commons), nulls if none | no |
 | POST | `/sites` | Create a site | JWT |
-| POST | `/entries` | Multipart: title, body, kind, author, optional site_id, lat/lng, image | no |
+| POST | `/entries` | Multipart: title, body, kind, author, optional site_id, lat/lng, state, image | no |
+| GET | `/entries` | Entries, newest first; `state`, `unattached=true` (located entries with no site) | no |
 | GET | `/entries/{id}` | One entry | no |
 | POST | `/tag` | `{text}` to site type, era, century, themes, language | no |
 | GET | `/search` | `q`, `k`, optional `state`: hybrid search over sites and entries | no |

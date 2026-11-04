@@ -162,6 +162,24 @@ async def nearest_site(
     return hits[0][0] if hits else None
 
 
+async def canonical_state(db: AsyncSession, typed: str | None) -> str | None:
+    """Match a typed state to an existing spelling, or tidy a new one. None if blank.
+
+    "rajasthan" and "Rajasthan" are the same state; a new all-lowercase name is title-cased.
+    """
+    value = " ".join((typed or "").replace("-", " ").split())
+    if not value:
+        return None
+    key = state_key(value)
+    for column in (Site.state, Entry.state):
+        found = (
+            await db.execute(select(column).where(func.lower(column) == key).limit(1))
+        ).scalar_one_or_none()
+        if found:
+            return found
+    return value if any(c.isupper() for c in value) else value.title()
+
+
 async def nearest_state(db: AsyncSession, lat: float, lng: float) -> str | None:
     """State of the closest existing site, at any distance. None if there are no sites."""
     hits = await sites_within(db, lat, lng, 20_000_000)
@@ -174,7 +192,7 @@ async def create_site(db: AsyncSession, data: SiteCreate) -> SiteOut:
     if unknown:
         raise HTTPException(status_code=422, detail=f"Unknown themes: {', '.join(unknown)}")
     values = data.model_dump()
-    values["state"] = (data.state or "").strip() or await nearest_state(db, data.lat, data.lng)
+    values["state"] = await canonical_state(db, data.state) or await nearest_state(db, data.lat, data.lng)
     site = Site(**values)
     db.add(site)
     await db.commit()
@@ -198,6 +216,14 @@ async def get_meta(db: AsyncSession, state: str | None = None) -> MetaOut:
         entry_stmt = entry_stmt.where(func.lower(Entry.state) == key)
     languages = Counter((await db.execute(entry_stmt)).scalars().all())
     state_counts = Counter(s.state for s in all_sites if s.state)
+    known = {name.lower() for name in state_counts}
+    entry_states = (
+        await db.execute(select(Entry.state).where(Entry.state.is_not(None)).distinct())
+    ).scalars().all()
+    for name in entry_states:  # a state that only has entries still gets an option, with 0 sites
+        if name.lower() not in known:
+            state_counts[name] += 0
+            known.add(name.lower())
     entry_total = sum(languages.values())
 
     def facet(counter: Counter) -> list[FacetCount]:

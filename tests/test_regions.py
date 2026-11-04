@@ -91,3 +91,33 @@ def test_explicit_entry_state_wins_and_entry_without_location_has_none(client, j
 def test_scoped_meta_counts_entries_by_state(client, jaipur_site):
     scoped = client.get(f"{API}/meta", params={"state": "rajasthan"}).json()
     assert scoped["entries"] >= 2  # the roadside shrine and "Morning light"
+
+
+def test_state_names_are_matched_case_insensitively(client, jaipur_site):
+    resp = client.post(f"{API}/entries", data={
+        "title": "Lower case state", "body": "x", "lat": "26.9", "lng": "75.8", "state": "rajasthan"})
+    assert resp.json()["state"] == "Rajasthan"
+    fresh = client.post(f"{API}/entries", data={
+        "title": "New state", "body": "x", "lat": "15.5", "lng": "73.8", "state": "goa"}).json()
+    assert fresh["state"] == "Goa"
+
+
+def test_entry_only_state_appears_in_meta_with_zero_sites(client, jaipur_site):
+    client.post(f"{API}/entries", data={
+        "title": "Beach shrine", "body": "A small shrine.", "lat": "15.5", "lng": "73.8", "state": "Goa"})
+    states = {s["value"]: s for s in client.get(f"{API}/meta").json()["states"]}
+    assert states["Goa"]["count"] == 0 and states["Goa"]["slug"] == "goa"
+
+
+def test_list_entries_unattached_and_by_state(client, jaipur_site):
+    client.post(f"{API}/entries", data={
+        "title": "Goa dot", "body": "x", "lat": "15.4", "lng": "73.9", "state": "Goa"})
+    loose = client.get(f"{API}/entries", params={"unattached": "true", "state": "goa"}).json()
+    assert loose["total"] >= 1
+    assert all(e["site_id"] is None and e["lat"] is not None and e["state"] == "Goa" for e in loose["items"])
+    attached = client.post(f"{API}/entries", data={
+        "title": "At the palace", "body": "x", "site_id": jaipur_site["id"]}).json()
+    ids = {e["id"] for e in client.get(f"{API}/entries", params={"unattached": "true"}).json()["items"]}
+    assert attached["id"] not in ids
+    everything = client.get(f"{API}/entries").json()
+    assert attached["id"] in {e["id"] for e in everything["items"]}

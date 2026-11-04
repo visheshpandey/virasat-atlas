@@ -149,6 +149,11 @@
     <label class="field">Site
       <select id="eSite"><option value="">Match to the nearest site automatically</option></select>
     </label>
+    <label class="field">State
+      <input id="eState" name="state" list="stateList" maxlength="60" autocomplete="off" placeholder="Type a state, e.g. Rajasthan (optional)">
+      <datalist id="stateList"></datalist>
+      <span class="hint">Leave empty to use the nearest site's state, which can be wrong far from any site.</span>
+    </label>
     <div class="field">
       <span class="lbl">Location</span>
       <div class="loc-row">
