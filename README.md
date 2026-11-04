@@ -1,141 +1,190 @@
-# SafeRoute — Intelligent Safe Route Navigation System
+# Virasat Atlas
 
-Production-grade async RESTful backend for safety-first navigation targeting women and vulnerable groups.
+**Turning unstructured heritage field notes into a searchable, mappable archive of Gujarat.**
+
+Submission for HC26-CULT01, *Digital Revitalisation of Unstructured Cultural & Architectural Heritage Archives* (IIT Gandhinagar, Blithchron).
+Pathways: **Geospatial / Immersive Web** (primary) and **Archival NLP / OCR** (secondary).
+
+> **Demo data notice.** The 24 sites and 12 field entries that ship with the seed script are **sample content for demonstration**. Coordinates were cross-checked against public references, but descriptions are short summaries, not scholarly records, and the field entries are invented notes by fictional "Demo Fellow" authors.
+
+## The problem
+
+Field documentation of heritage (travel journals, photographs, scanned Hindi and Gujarati documents, folklore notes) piles up as unstructured files. Nobody can search it, nobody can see it on a map, and the Hindi and Gujarati material is invisible to English keyword search. Knowledge gathered on one fellowship trip is effectively lost to the next.
+
+## The solution
+
+Virasat Atlas ingests a note, a photo or a scanned page, **tags it automatically** (site type, era, century, themes, language), **attaches it to the nearest known site**, and makes everything **searchable across English, Hindi and Gujarati** on an interactive map. It can also plan a **heritage trail** through a cluster of sites.
 
 ## Features
 
-- **Safety-first routing** — Routes optimized for personal safety, not just distance
-- **Community reports** — Crowd-sourced safety incident reporting
-- **SOS alerts** — One-tap emergency alerts with location
-- **Time-based risk** — Dynamic scoring based on time of day
-- **JWT authentication** — Secure token-based auth with bcrypt
-
-## Tech Stack
-
-- **Python 3.11** + **FastAPI** (async-first)
-- **PostgreSQL 15** + **PostGIS** (geospatial)
-- **SQLAlchemy 2.0** (async ORM)
-- **NetworkX** (graph routing)
-- **Pydantic** (validation)
-
-## Setup
-
-### Prerequisites
-
-- Python 3.11+
-- PostgreSQL 15+ with PostGIS extension
-
-### Installation
-
-```bash
-# 1. Clone and navigate
-cd saferoute
-
-# 2. Create virtual environment
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-
-# 3. Install dependencies
-pip install -r requirements.txt
-
-# 4. Configure environment
-cp .env.example .env
-# Edit .env with your PostgreSQL credentials
-
-# 5. Enable PostGIS
-psql -U postgres -c "CREATE DATABASE saferoute_db;"
-psql -U postgres -d saferoute_db -c "CREATE EXTENSION IF NOT EXISTS postgis;"
-
-# 6. Seed database (creates tables + test data)
-python scripts/seed.py
-
-# 7. Start server
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-```
-
-## API Documentation
-
-Once running:
-- **Swagger UI**: http://localhost:8000/docs
-- **ReDoc**: http://localhost:8000/redoc
-- **Health check**: http://localhost:8000/health
-
-## Test Credentials
-
-```
-admin@saferoute.dev / Admin@1234
-priya@saferoute.dev / Test@1234
-test@saferoute.dev / Test@1234
-```
-
-## API Endpoints
-
-### Authentication
-- `POST /api/v1/auth/register` — Create account
-- `POST /api/v1/auth/login` — Get JWT tokens
-
-### User
-- `GET /api/v1/user/me` — Get profile (auth required)
-
-### Routing
-- `POST /api/v1/route/safest` — Compute safest route
-- `POST /api/v1/route/shortest` — Compute shortest route
-
-### Reports
-- `POST /api/v1/report` — Submit safety report
-- `GET /api/v1/report/nearby` — Get nearby reports
-
-### SOS
-- `POST /api/v1/sos/trigger` — Trigger emergency alert
-
-## Example Usage
-
-```bash
-# 1. Register
-curl -X POST http://localhost:8000/api/v1/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"name":"Test User","email":"user@test.com","password":"Test@1234"}'
-
-# 2. Login
-curl -X POST http://localhost:8000/api/v1/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"user@test.com","password":"Test@1234"}'
-
-# 3. Get safest route (use token from login)
-curl -X POST http://localhost:8000/api/v1/route/safest \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"source_lat":22.7196,"source_lng":75.8577,"dest_lat":22.7250,"dest_lng":75.8650}'
-```
-
-## Region
-
-Currently configured for **Indore, India** (22.7196°N, 75.8577°E).
-
-Seed data includes:
-- 5 test users
-- 50 safety reports (5 hotspots + 45 random)
-- 20 location pings
-- 10 sample routes
+- Interactive Leaflet map of Gujarat, colour-coded by site type, UNESCO sites ringed in gold, detail drawer with folklore and field entries
+- Multilingual auto-tagger (English, Devanagari, Gujarati) with century and BCE extraction and script detection; optional LLM layer when an API key is set
+- Hybrid search: word TF-IDF (0.6) + character n-gram TF-IDF (0.4), so Hindi, Gujarati, transliteration and typos all work; optional dense layer via `SEMANTIC_MODEL`
+- Field entry ingest with photo upload (verified as a real image), auto-attach to the nearest site within 2 km, and a live tag preview in the UI
+- Heritage trails: cluster selection, nearest-neighbour ordering, 2-opt improvement, distance and time estimate
+- OCR digitisation of scanned Hindi / Gujarati / English pages, with a "save as entry" flow
+- Era timeline slider, type / era / theme filters, responsive layout with a mobile bottom sheet
+- JWT authentication (bcrypt), clean JSON error envelope, 8 MB upload limit, Swagger docs at `/docs`
 
 ## Architecture
 
+```mermaid
+flowchart LR
+    UI["Frontend<br/>Leaflet, plain JS"] -->|REST /api/v1| API["FastAPI"]
+    API --> T["Tagger<br/>rules + optional LLM"]
+    API --> S["Search index<br/>word + char TF-IDF"]
+    API --> TR["Trail planner<br/>NN + 2-opt"]
+    API --> O["OCR<br/>Tesseract"]
+    API --> DB[("PostGIS or SQLite")]
+    API --> M[("Media store<br/>/media")]
+    T -.-> S
+    DB -.->|rebuild on startup and after writes| S
 ```
-FastAPI App
-├── Routes (auth, user, routing, report, sos)
-├── Services (business logic)
-├── Models (SQLAlchemy ORM)
-├── Schemas (Pydantic validation)
-└── Utils (geo, graph, risk, logger)
+
+## Data model
+
+```mermaid
+erDiagram
+    USERS {
+        uuid id PK
+        string name
+        string email
+        string hashed_password
+        string role "contributor | researcher | admin"
+        datetime created_at
+    }
+    SITES {
+        uuid id PK
+        string name
+        string site_type "stepwell|fort|temple|mosque|mausoleum|palace|harappan-site|craft|memorial"
+        string era
+        int century "negative = BCE"
+        string district
+        float lat
+        float lng
+        text description
+        text folklore
+        json themes
+        bool unesco
+        datetime created_at
+    }
+    ENTRIES {
+        uuid id PK
+        uuid site_id FK "nullable"
+        string title
+        text body
+        string kind "journal|photo|document|folklore|ocr"
+        string language "en|hi|gu"
+        string author
+        float lat
+        float lng
+        string image_path
+        json tags
+        datetime created_at
+    }
+    SITES ||--o{ ENTRIES : "has"
 ```
 
-## Performance
+On PostgreSQL a generated `geog` geography column and a GIST index are added to `sites` and `entries`. On SQLite, `lat`/`lng` are used with Haversine in Python.
 
-- Route computation: <800ms (P95)
-- Auth response: <200ms
-- Async-first design with connection pooling
-- Graph caching (LRU, 5min TTL)
+## API (`/api/v1`)
 
-## License
+| Method | Path | Purpose | Auth |
+|---|---|---|---|
+| GET | `/health` | Liveness | no |
+| GET | `/meta` | Types, eras, themes, languages with counts | no |
+| GET | `/sites` | List; filters `type`, `era`, `theme`, `unesco` | no |
+| GET | `/sites/nearby` | `lat`, `lng`, `radius_km` | no |
+| GET | `/sites/{id}` | Site with its entries | no |
+| POST | `/sites` | Create a site | JWT |
+| POST | `/entries` | Multipart: title, body, kind, author, optional site_id, lat/lng, image | no |
+| GET | `/entries/{id}` | One entry | no |
+| POST | `/tag` | `{text}` to site type, era, century, themes, language | no |
+| GET | `/search` | `q`, `k`: hybrid search over sites and entries | no |
+| POST | `/trails` | `site_ids` or `theme`, optional start, `max_stops` 2-15 | no |
+| POST | `/ocr` | Image upload (`file`, optional `lang`, default `hin+eng`) | no |
+| POST | `/auth/register`, `/auth/login` | Accounts and tokens | no |
+| GET | `/user/me` | Current user | JWT |
 
-MIT
+Errors use one envelope: `{"error": {"code": "...", "message": "...", "detail": ...}}`. Interactive docs: `http://localhost:8000/docs`.
+
+`POST /entries` is open so a field contributor can submit without an account; `POST /sites` needs a token.
+
+## Setup
+
+### Option 1: Docker (PostGIS)
+
+```bash
+docker compose up --build
+```
+
+Open http://localhost:8000. The first start seeds the demo data.
+
+> Docker has **not been run on the author's machine** (not installed there). The compose file is exercised by a CI job on push; check the Actions tab for its status.
+
+### Option 2: local virtualenv (SQLite, no database needed)
+
+```bash
+python -m venv .venv
+# Windows: .venv\Scripts\activate     macOS/Linux: source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env            # optional; defaults work
+python scripts/seed.py          # loads demo data (skips if data exists; --reset to wipe)
+uvicorn app.main:app --port 8000
+```
+
+Open http://localhost:8000. The seed prints a random password for the demo accounts once, or uses `SEED_PASSWORD` if you set it.
+
+### Optional features
+
+| Feature | How |
+|---|---|
+| OCR | Install Tesseract with the `hin`, `guj` and `eng` language packs. If it is not on `PATH`, set `TESSERACT_CMD`; for language data in a custom folder set `TESSDATA_PREFIX`. Without it `/ocr` returns **501** with a clear message. A sample scan is in `samples/hindi_sample.png`. |
+| LLM tagging layer | Set `ANTHROPIC_API_KEY`. It fills fields the rules left empty, is cached for 10 minutes, and never blocks ingest. |
+| Dense search | `pip install -r requirements-semantic.txt` and set `SEMANTIC_MODEL=paraphrase-multilingual-MiniLM-L12-v2`. |
+
+## Tests
+
+```bash
+pip install -r requirements-dev.txt
+pytest
+```
+
+Tests use a temporary SQLite database and cover the tagger (stepwell, Hindi, century, BCE, and "port" not matching "important"), search (Hindi query finds a Hindi entry, "stepwell" finds Rani ki Vav), trails (ordering, distances, start anchoring), the API (listing, auto-attach, upload validation, auth, the OCR 501 path) and the seed data.
+
+## Demo script (5 steps)
+
+1. **Map and filters.** Open the app. 24 sites appear, colour-coded. Filter to *stepwell*, then drag the century slider to see the era narrow.
+2. **Open a site.** Click *Rani ki Vav*: UNESCO badge, description, folklore and its field entries.
+3. **Multilingual search.** Search `रानी की वाव`. The Hindi field note is found, with a Hindi chip. Then try `stepwel` (typo) and `જાળી` (the Gujarati note about a mosque lattice window).
+4. **Add a field entry.** Click *Add Field Entry*, drop a pin near Patan, type a note and watch the tags appear live. Upload a photo and submit; it attaches to the nearest site.
+5. **Trail and OCR.** Build a *water-architecture* trail and read the km and hours. Then *Digitise Document* with `samples/hindi_sample.png`, review the text and tags, and save it as an entry.
+
+## Scalability notes
+
+- **Spatial queries:** PostGIS `geography` columns with a GIST index (already created on PostgreSQL) keep nearby queries fast at millions of rows.
+- **Vectors:** pgvector for embeddings, replacing the in-memory dense layer. Not enabled here because the stock `postgis/postgis` image does not include it.
+- **Media:** move `/media` to object storage (S3 or GCS) behind a CDN.
+- **Ingestion:** put tagging, OCR and indexing on a background queue so uploads return immediately.
+- **Search:** the index is in memory and rebuilt after each write; shard by region or switch to a search service for large archives.
+
+## Honest limitations
+
+- Trail distances are **straight-line**, not road distance, and travel time is a rough estimate (45 km/h plus 1 hour per stop).
+- Search is TF-IDF, which matches words and character patterns but does not understand meaning; the dense layer is optional and was not tested on the author's machine.
+- The rule-based tagger covers a fixed vocabulary of Gujarat heritage terms and will miss anything outside it.
+- The LLM tagging layer is covered by mocked tests only; it has not been run against the live API.
+- OCR quality depends on the scan. Printed Hindi works far better than handwriting or old manuscripts.
+- The PostGIS nearby query and the Docker setup are untested locally.
+- Seed content is demo data (see the notice at the top).
+
+## Roadmap
+
+- 3D digital twins from photogrammetry, viewed with WebGL / Three.js
+- IndicTrans translation so every entry is readable in all three languages
+- Crowdsourced verification and a researcher review queue
+- Mapbox 3D terrain and historic map overlays
+
+## Credits and license
+
+Built on a FastAPI + async SQLAlchemy backend originally written for a different project (SafeRoute); the auth layer, project layout and logging come from it. Released under the MIT License (see `LICENSE`).
