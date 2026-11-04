@@ -50,6 +50,7 @@ class EntryOut(BaseModel):
     kind: EntryKind
     language: Language
     author: str | None
+    state: str | None = None
     lat: float | None
     lng: float | None
     image_url: str | None
@@ -67,6 +68,7 @@ class SiteCreate(BaseModel):
     era: str | None = None
     century: int | None = Field(default=None, ge=-30, le=21)
     district: str | None = None
+    state: str | None = Field(default=None, max_length=60)  # filled from the nearest site if omitted
     lat: float = Field(ge=-90, le=90)
     lng: float = Field(ge=-180, le=180)
     description: str = ""
@@ -82,6 +84,7 @@ class SiteOut(BaseModel):
     era: str | None
     century: int | None
     district: str | None
+    state: str | None = None
     lat: float
     lng: float
     description: str
@@ -127,11 +130,18 @@ class FacetCount(BaseModel):
     count: int
 
 
+class StateFacet(BaseModel):
+    value: str  # display name, e.g. "Madhya Pradesh"
+    slug: str  # URL form, e.g. "madhya-pradesh"
+    count: int  # number of sites
+
+
 class MetaOut(BaseModel):
     types: list[FacetCount]
     eras: list[FacetCount]
     themes: list[FacetCount]
     languages: list[FacetCount]  # counted over entries
+    states: list[StateFacet] = []  # always every state, even when the request is scoped
     sites: int
     entries: int
 

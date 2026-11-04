@@ -27,12 +27,33 @@ async def _apply_postgis(conn: AsyncConnection) -> None:
         ))
 
 
+async def _add_state_columns(conn: AsyncConnection) -> None:
+    """Add the `state` column to databases created before regions existed, then backfill.
+
+    Sites that predate the column were all Gujarat. Entries inherit their site's state.
+    """
+    for table in ("sites", "entries"):
+        if settings.is_postgres:
+            await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS state VARCHAR(60)"))
+        else:
+            columns = (await conn.execute(text(f"PRAGMA table_info({table})"))).all()
+            if "state" not in {c[1] for c in columns}:
+                await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN state VARCHAR(60)"))
+        await conn.execute(text(f"CREATE INDEX IF NOT EXISTS ix_{table}_state ON {table} (state)"))
+    await conn.execute(text("UPDATE sites SET state = 'Gujarat' WHERE state IS NULL"))
+    await conn.execute(text(
+        "UPDATE entries SET state = (SELECT s.state FROM sites s WHERE s.id = entries.site_id) "
+        "WHERE state IS NULL AND site_id IS NOT NULL"
+    ))
+
+
 async def init_db() -> None:
     """Create all tables, plus spatial columns when running on PostGIS."""
     async with engine.begin() as conn:
         if settings.is_postgres:
             await conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis"))
         await conn.run_sync(Base.metadata.create_all)
+        await _add_state_columns(conn)
         if settings.is_postgres:
             await _apply_postgis(conn)
 

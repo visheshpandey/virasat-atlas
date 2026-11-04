@@ -17,6 +17,7 @@ class Site(Base):
     era: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
     century: Mapped[int | None] = mapped_column(Integer, nullable=True)  # negative = BCE
     district: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    state: Mapped[str | None] = mapped_column(String(60), nullable=True, index=True)
     lat: Mapped[float] = mapped_column(Double, nullable=False)
     lng: Mapped[float] = mapped_column(Double, nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False, default="")

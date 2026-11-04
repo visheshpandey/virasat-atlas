@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.utils.logger import get_logger
+from app.utils.states import state_key
 
 logger = get_logger(__name__)
 
@@ -59,6 +60,7 @@ class SearchDoc:
     lat: float | None
     lng: float | None
     language: str
+    state: str | None = None
 
 
 @dataclass
@@ -162,14 +164,18 @@ class SearchIndex:
         self._state = state
 
     # ---- query ----
-    def search(self, query: str, k: int = 10) -> list[dict]:
-        """Return SearchResult-shaped dicts, best first, only with score > 0."""
+    def search(self, query: str, k: int = 10, region: str | None = None) -> list[dict]:
+        """Return SearchResult-shaped dicts, best first, only with score > 0.
+
+        `region` limits results to documents in that state (name or slug).
+        """
         state = self._state
         q = normalize(query)
         if not q or state.word_vec is None or not state.docs:
             return []
 
-        key = (q, k)
+        key_state = state_key(region)
+        key = (q, k, key_state)
         if key in state.cache:
             state.cache.move_to_end(key)
             return [dict(r) for r in state.cache[key]]
@@ -182,6 +188,10 @@ class SearchIndex:
             if qv is not None:
                 dense = np.clip(state.dense @ qv[0], 0.0, None)
                 score = 0.5 * score + 0.5 * dense
+
+        if key_state:
+            mask = np.array([(d.state or "").lower() == key_state for d in state.docs], dtype=float)
+            score = score * mask
 
         results: list[dict] = []
         order = np.argsort(-score, kind="stable")
@@ -231,7 +241,7 @@ async def rebuild_from_db(db: AsyncSession) -> None:
         docs.append(SearchDoc(
             kind="site", id=str(s.id), site_id=str(s.id), title=s.name,
             text=_join(s.description, s.folklore, s.site_type, s.era, s.district, *(s.themes or [])),
-            lat=s.lat, lng=s.lng, language="en",
+            lat=s.lat, lng=s.lng, language="en", state=s.state,
         ))
     for e in entries:
         site = by_id.get(e.site_id) if e.site_id else None
@@ -242,7 +252,7 @@ async def rebuild_from_db(db: AsyncSession) -> None:
                        *(tags.get("themes") or [])),
             lat=e.lat if e.lat is not None else (site.lat if site else None),
             lng=e.lng if e.lng is not None else (site.lng if site else None),
-            language=e.language,
+            language=e.language, state=e.state or (site.state if site else None),
         ))
     await asyncio.to_thread(index.rebuild, docs)
     logger.info(f"search_index_rebuilt docs={len(docs)}")

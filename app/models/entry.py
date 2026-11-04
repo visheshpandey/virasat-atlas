@@ -20,6 +20,7 @@ class Entry(Base):
     kind: Mapped[str] = mapped_column(String(20), nullable=False, default="journal")
     language: Mapped[str] = mapped_column(String(5), nullable=False, default="en")
     author: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    state: Mapped[str | None] = mapped_column(String(60), nullable=True, index=True)
     lat: Mapped[float | None] = mapped_column(Double, nullable=True)
     lng: Mapped[float | None] = mapped_column(Double, nullable=True)
     image_path: Mapped[str | None] = mapped_column(String(300), nullable=True)

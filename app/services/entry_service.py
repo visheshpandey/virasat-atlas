@@ -102,14 +102,16 @@ async def create_entry(
     lat: str | None,
     lng: str | None,
     image: UploadFile | None,
+    state: str | None = None,
 ) -> EntryOut:
     """Validate, tag, attach to a site and store one field entry.
 
     Without a site_id but with coordinates, the entry joins the nearest site
-    within AUTO_ATTACH_KM. The search index is rebuilt after the write.
+    within AUTO_ATTACH_KM. A missing `state` is filled from the attached site, else from the
+    nearest site at any distance. The search index is rebuilt after the write.
     """
     # Imported here: site_service imports this module for entry_out.
-    from app.services.site_service import nearest_site, reindex
+    from app.services.site_service import nearest_site, nearest_state, reindex
 
     if kind not in get_args(EntryKind):
         raise HTTPException(
@@ -140,6 +142,15 @@ async def create_entry(
         site = await nearest_site(db, lat_v, lng_v, AUTO_ATTACH_KM)
         auto_attached = site is not None
 
+    state = (state or "").strip() or None
+    if state is not None and len(state) > 60:
+        raise HTTPException(status_code=422, detail="state must be at most 60 characters")
+    if state is None:
+        if site is not None:
+            state = site.state
+        elif lat_v is not None and lng_v is not None:
+            state = await nearest_state(db, lat_v, lng_v)
+
     image_name: str | None = None
     if image is not None and image.filename:
         data = await read_upload(image)
@@ -154,6 +165,7 @@ async def create_entry(
         kind=kind,
         language=tags.language,
         author=author,
+        state=state,
         lat=lat_v,
         lng=lng_v,
         image_path=image_name,

@@ -23,11 +23,13 @@ from app.schemas.heritage import (
     SiteDetail,
     SiteList,
     SiteOut,
+    StateFacet,
 )
 from app.services.entry_service import entry_out
 from app.services.search_index import rebuild_from_db
 from app.utils.geo import haversine
 from app.utils.logger import get_logger
+from app.utils.states import slugify, state_key
 
 logger = get_logger(__name__)
 
@@ -67,9 +69,13 @@ async def list_sites(
     era: str | None,
     theme: str | None,
     unesco: bool | None,
+    state: str | None = None,
 ) -> SiteList:
     """All sites matching the optional filters, ordered by name."""
     stmt = select(Site).order_by(Site.name)
+    key = state_key(state)
+    if key:
+        stmt = stmt.where(func.lower(Site.state) == key)
     if site_type:
         stmt = stmt.where(Site.site_type == site_type)
     if era:
@@ -156,12 +162,20 @@ async def nearest_site(
     return hits[0][0] if hits else None
 
 
+async def nearest_state(db: AsyncSession, lat: float, lng: float) -> str | None:
+    """State of the closest existing site, at any distance. None if there are no sites."""
+    hits = await sites_within(db, lat, lng, 20_000_000)
+    return hits[0][0].state if hits else None
+
+
 async def create_site(db: AsyncSession, data: SiteCreate) -> SiteOut:
     """Persist a new site and refresh the search index."""
     unknown = [t for t in data.themes if t not in THEMES]
     if unknown:
         raise HTTPException(status_code=422, detail=f"Unknown themes: {', '.join(unknown)}")
-    site = Site(**data.model_dump())
+    values = data.model_dump()
+    values["state"] = (data.state or "").strip() or await nearest_state(db, data.lat, data.lng)
+    site = Site(**values)
     db.add(site)
     await db.commit()
     await db.refresh(site)
@@ -170,12 +184,20 @@ async def create_site(db: AsyncSession, data: SiteCreate) -> SiteOut:
     return site_out(site, 0)
 
 
-async def get_meta(db: AsyncSession) -> MetaOut:
-    """Available filter values with counts. Types, eras and themes count sites."""
-    sites = (await db.execute(select(Site))).scalars().all()
-    languages = Counter(
-        (await db.execute(select(Entry.language))).scalars().all()
-    )
+async def get_meta(db: AsyncSession, state: str | None = None) -> MetaOut:
+    """Available filter values with counts. Types, eras and themes count sites.
+
+    With `state`, every count is scoped to that state, except `states`, which always
+    lists every state so the region selector keeps all its options.
+    """
+    all_sites = (await db.execute(select(Site))).scalars().all()
+    key = state_key(state)
+    sites = [s for s in all_sites if (s.state or "").lower() == key] if key else all_sites
+    entry_stmt = select(Entry.language)
+    if key:
+        entry_stmt = entry_stmt.where(func.lower(Entry.state) == key)
+    languages = Counter((await db.execute(entry_stmt)).scalars().all())
+    state_counts = Counter(s.state for s in all_sites if s.state)
     entry_total = sum(languages.values())
 
     def facet(counter: Counter) -> list[FacetCount]:
@@ -190,6 +212,10 @@ async def get_meta(db: AsyncSession) -> MetaOut:
         eras=facet(Counter(s.era for s in sites if s.era)),
         themes=facet(themes),
         languages=facet(languages),
+        states=[
+            StateFacet(value=name, slug=slugify(name), count=n)
+            for name, n in sorted(state_counts.items(), key=lambda kv: (-kv[1], kv[0]))
+        ],
         sites=len(sites),
         entries=entry_total,
     )

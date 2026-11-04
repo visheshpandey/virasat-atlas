@@ -40,10 +40,11 @@ async def list_sites(
     era: str | None = Query(default=None, max_length=50),
     theme: str | None = Query(default=None, max_length=50),
     unesco: bool | None = None,
+    state: str | None = Query(default=None, max_length=60),
     db: AsyncSession = Depends(get_db),
 ) -> SiteList:
-    """List sites, optionally filtered by type, era, theme and UNESCO status."""
-    return await site_service.list_sites(db, site_type, era, theme, unesco)
+    """List sites, optionally filtered by type, era, theme, UNESCO status and state."""
+    return await site_service.list_sites(db, site_type, era, theme, unesco, state)
 
 
 # Declared before /{site_id} so "nearby" is never read as an id.

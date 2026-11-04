@@ -20,6 +20,7 @@ async def create_entry(
     site_id: str | None = Form(default=None),
     lat: str | None = Form(default=None),
     lng: str | None = Form(default=None),
+    state: str | None = Form(default=None, max_length=60),
     image: UploadFile | None = File(default=None),
     db: AsyncSession = Depends(get_db),
 ) -> EntryOut:
@@ -38,6 +39,7 @@ async def create_entry(
         lat=lat,
         lng=lng,
         image=image,
+        state=state,
     )
 
 

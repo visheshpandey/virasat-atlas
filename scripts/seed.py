@@ -415,7 +415,7 @@ async def populate(db: AsyncSession, password: str) -> dict[str, int]:
 
     sites_by_name: dict[str, Site] = {}
     for data in SITES:
-        site = Site(**data)
+        site = Site(**{"state": "Gujarat", **data})
         db.add(site)
         sites_by_name[data["name"]] = site
     await db.flush()
@@ -425,6 +425,7 @@ async def populate(db: AsyncSession, password: str) -> dict[str, int]:
         tags = await _tag(data["body"], data["language"])
         db.add(Entry(
             site_id=site.id,
+            state=site.state,
             title=data["title"],
             body=data["body"],
             kind=data["kind"],
