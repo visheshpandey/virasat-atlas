@@ -140,7 +140,7 @@ Open http://localhost:8000. The seed prints a random password for the demo accou
 | Feature | How |
 |---|---|
 | OCR | Install Tesseract with the `hin`, `guj` and `eng` language packs. If it is not on `PATH`, set `TESSERACT_CMD`; for language data in a custom folder set `TESSDATA_PREFIX`. Without it `/ocr` returns **501** with a clear message. A sample scan is in `samples/hindi_sample.png`; on Windows with Tesseract 5.4 and the `hin` data it reads back as correct Hindi and is tagged as a Chaulukya stepwell. Language data can be fetched from `tesseract-ocr/tessdata_fast` into a `tessdata/` folder (git-ignored). |
-| LLM tagging layer | Set `GEMINI_API_KEY` (a Google AI Studio key; `GEMINI_MODEL` defaults to `gemini-2.0-flash`). It calls the Gemini REST API from the backend only, fills fields the rules left empty, is cached for 10 minutes, and never blocks ingest. |
+| LLM tagging layer | Set `GEMINI_API_KEY` (a Google AI Studio key; `GEMINI_MODEL` defaults to `gemini-3.1-flash-lite`). It calls the Gemini REST API from the backend only, fills fields the rules left empty, is cached for 10 minutes, and never blocks ingest. |
 | Dense search | `pip install -r requirements-semantic.txt` and set `SEMANTIC_MODEL=paraphrase-multilingual-MiniLM-L12-v2`. |
 
 ## Tests

@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     MAX_UPLOAD_MB: int = 8
 
     GEMINI_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-2.0-flash"
+    GEMINI_MODEL: str = "gemini-3.1-flash-lite"
     SEMANTIC_MODEL: str = ""
     TESSERACT_CMD: str = ""
     TESSDATA_PREFIX: str = ""

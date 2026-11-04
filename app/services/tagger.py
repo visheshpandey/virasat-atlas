@@ -414,8 +414,11 @@ def _cache_put(key: str, value: dict | None) -> None:
         _cache.popitem(last=False)
 
 
-async def tag_text(text: str) -> dict:
-    """Layer 1 plus the optional model layer. Never raises because of the model call."""
+async def tag_text(text: str, timeout: float = 8.0) -> dict:
+    """Layer 1 plus the optional model layer. Never raises because of the model call.
+
+    `timeout` caps how long the model call may take; on expiry the rules result is returned.
+    """
     rules = tag_rules(text)
     if not settings.GEMINI_API_KEY or not text.strip():
         return rules
@@ -424,7 +427,7 @@ async def tag_text(text: str) -> dict:
     hit, extra = _cache_get(key)
     if not hit:
         try:
-            extra = await asyncio.wait_for(_call_gemini(text), timeout=15.0)
+            extra = await asyncio.wait_for(_call_gemini(text), timeout=timeout)
         except Exception as exc:  # network, auth, rate limit, bad JSON: all fall back to rules
             logger.warning(f"model_tagging_failed error={type(exc).__name__}")
             extra = None
