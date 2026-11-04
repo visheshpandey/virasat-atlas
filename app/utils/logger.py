@@ -1,6 +1,9 @@
-import logging
+"""Structured JSON logging."""
 import json
+import logging
 from datetime import datetime, timezone
+
+from app.core.config import settings
 
 
 class JSONFormatter(logging.Formatter):
@@ -11,8 +14,8 @@ class JSONFormatter(logging.Formatter):
             "module": record.module,
             "event": record.getMessage(),
         }
-        if hasattr(record, "extra"):
-            log_obj.update(record.extra)
+        if record.exc_info:
+            log_obj["exception"] = self.formatException(record.exc_info)
         return json.dumps(log_obj)
 
 
@@ -22,5 +25,6 @@ def get_logger(name: str) -> logging.Logger:
         handler = logging.StreamHandler()
         handler.setFormatter(JSONFormatter())
         logger.addHandler(handler)
-    logger.setLevel(logging.DEBUG)
+        logger.propagate = False
+    logger.setLevel(settings.LOG_LEVEL.upper())
     return logger

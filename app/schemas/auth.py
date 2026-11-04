@@ -1,3 +1,4 @@
+"""Auth request and response bodies. Registration cannot choose a role."""
 from pydantic import BaseModel, EmailStr, field_validator
 
 
@@ -10,8 +11,8 @@ class RegisterRequest(BaseModel):
     @field_validator("password")
     @classmethod
     def password_min_length(cls, v: str) -> str:
-        if len(v) < 4:
-            raise ValueError("Password must be at least 4 characters")
+        if len(v) < 8:
+            raise ValueError("Password must be at least 8 characters")
         return v
 
 

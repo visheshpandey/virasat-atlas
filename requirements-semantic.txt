@@ -1,0 +1,2 @@
+# Optional dense search layer (pulls in torch, roughly 2 GB). Enable with SEMANTIC_MODEL in .env.
+sentence-transformers>=2.7,<4
